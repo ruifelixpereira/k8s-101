@@ -5,11 +5,11 @@
 # Set environment variables
 export LOCATION?=northeurope
 export APP_NAME?=azure-vote
-export RESOURCE_GROUP=MyK8s
-export CLUSTER_NAME?=rfpk8s
-export SUBSCRIPTION?=5dd549af-d55f-4c2c-ba14-8bd7699a59b3
-export ACR_NAME?=rfp01
-export ACR_RESOURCEGROUP?=containerreg
+export RESOURCE_GROUP=xxxxx
+export CLUSTER_NAME?=xxxxx
+export SUBSCRIPTION?=xxxxxxx
+export ACR_NAME?=xxxxx
+export ACR_RESOURCEGROUP?=xxxxx
 
 # Permanent local overrides
 -include ../.env
