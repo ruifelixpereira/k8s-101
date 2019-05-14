@@ -76,6 +76,49 @@ check-access-to-acr:
 		--assignee $(SERVICE_PRINCIPAL_ID) --all  
 
 #
+# Lab 01 (optional).
+#
+# Get versions
+get-cluster-versions:
+	az aks get-versions --resource-group $(RESOURCE_GROUP) --name $(CLUSTER_NAME) --location $(LOCATION) --output table
+
+get-instrumentation-key:
+	az resource show --resource-group $(NAMESPACE_PREFIX)-monitoring --name $(NAMESPACE_PREFIX) --resource-type "Microsoft.Insights/components" --query 'properties.InstrumentationKey' --output tsv
+
+# Upgrade cluster (takes time, avoid it in demo)
+upgrade-cluster-to-%:
+	az aks upgrade --resource-group $(RESOURCE_GROUP) --name $(CLUSTER_NAME) --kubernetes-version $*
+
+# Open the management console
+browse-console:
+	az aks browse --resource-group $(RESOURCE_GROUP) --name $(CLUSTER_NAME)
+
+# Proxy to the management console
+# Browse this URL: http://localhost:8001/api/v1/namespaces/kube-system/services/http:kubernetes-dashboard:/proxy/#!/overview?namespace=default
+proxy:
+	kubectl proxy --port 8001
+
+
+# Scale number of frontend pods
+scale-frontend:
+	kubectl scale deployment azure-vote-front \
+		--replicas=2
+
+# Configure auto-scale
+auto-scale:
+	kubectl autoscale deployment azure-vote-front \
+		--min=2 \
+		--max=15 \
+		--cpu-percent=80
+
+# Scale the cluster (2 min - avoid it in the demo - it doesn't appear imediately in the Kubernetes admin dashboard)
+scale-cluster:
+	az aks scale \
+		--resource-group=$(RESOURCE_GROUP) \
+		--name=$(CLUSTER_NAME) \
+		--node-count 3
+
+#
 # Lab 02.
 #
 # Deploy kubernetes app to the cluster
@@ -123,57 +166,7 @@ new-cleanup:
 	kubectl delete service azure-vote-back
 
 #
-# Lab 01-01.
-#
-# Get versions
-get-cluster-versions:
-	az aks get-versions --resource-group $(RESOURCE_GROUP) --name $(CLUSTER_NAME) --location $(LOCATION) --output table
-
-get-instrumentation-key:
-	az resource show --resource-group $(NAMESPACE_PREFIX)-monitoring --name $(NAMESPACE_PREFIX) --resource-type "Microsoft.Insights/components" --query 'properties.InstrumentationKey' --output tsv
-
-# Upgrade cluster (takes time, avoid it in demo)
-upgrade-cluster-to-%:
-	az aks upgrade --resource-group $(RESOURCE_GROUP) --name $(CLUSTER_NAME) --kubernetes-version $*
-
-# Open the management console
-browse-console:
-	az aks browse --resource-group $(RESOURCE_GROUP) --name $(CLUSTER_NAME)
-
-# Proxy to the management console
-# Browse this URL: http://localhost:8001/api/v1/namespaces/kube-system/services/http:kubernetes-dashboard:/proxy/#!/overview?namespace=default
-proxy:
-	kubectl proxy --port 8001
-
-
-# Scale number of frontend pods
-scale-frontend:
-	kubectl scale deployment azure-vote-front \
-		--replicas=2
-
-# Configure auto-scale
-auto-scale:
-	kubectl autoscale deployment azure-vote-front \
-		--min=2 \
-		--max=15 \
-		--cpu-percent=80
-
-# Scale the cluster (2 min - avoid it in the demo - it doesn't appear imediately in the Kubernetes admin dashboard)
-scale-cluster:
-	az aks scale \
-		--resource-group=$(RESOURCE_GROUP) \
-		--name=$(CLUSTER_NAME) \
-		--node-count 3
-
-#
 # Lab 04.
-#
-create-namespace:
-	kubectl get namespaces
-	kubectl create namespace aznamespace
-
-#
-# Lab 05.
 #
 # Check storage classes
 get-storageclasses:
@@ -181,11 +174,11 @@ get-storageclasses:
 
 # Create new storage class
 create-storageclass:
-	kubectl create -f sample-storageclass.yaml
+	kubectl create -f volumes/sample-storageclass.yaml
 
 # Create new persistent volume
 create-pvc:
-	kubectl create -f sample-pvc.yaml
+	kubectl create -f volumes/sample-pvc.yaml
 
 # Get persistent volumes
 get-pv:
@@ -195,8 +188,64 @@ describe-pv:
 	kubectl describe pv
 
 test-pv:
-	kubectl apply -f test-persistent-volumes.yaml
+	kubectl apply -f volumes/test-persistent-volumes.yaml
 
 check-pv:
 	kubectl get pod task-pv-pod
 	kubectl exec -it task-pv-pod -- /bin/bash
+
+#
+# Lab 05.
+#
+create-namespace:
+	kubectl get namespaces
+	kubectl create namespace aznamespace
+
+#
+# Lab 06.
+#
+provision-rbac:
+	AKS_ID=$(az aks show --resource-group myResourceGroup --name myAKSCluster --query id -o tsv)
+	APPDEV_ID=$(az ad group create --display-name appdev --mail-nickname appdev --query objectId -o tsv)
+	az role assignment create \
+		--assignee $(APPDEV_ID) \
+		--role "Azure Kubernetes Service Cluster User Role" \
+  		--scope $(AKS_ID)
+	AKSDEV_ID=$(az ad user create --display-name "AKS Dev" --user-principal-name aksdev@contoso.com --password P@ssw0rd1 --query objectId -o tsv)
+	az ad group member add --group appdev --member-id $(AKSDEV_ID)
+
+# Colect final output Id and use it to replace groupObjectId in file rolebinding-dev-namespace.yaml
+aks-rbac-admin:
+	az aks get-credentials --resource-group myResourceGroup --name myAKSCluster –admin
+	kubectl create namespace dev
+	kubectl apply -f rbac/role-dev-namespace.yaml
+	az ad group show --group appdev --query objectId -o tsv
+
+# After running the previous command and customizing file rolebinding-dev-namespace.yaml
+aks-rbac-admin-2:
+	kubectl apply -f rolebinding-dev-namespace.yaml
+
+test-with-user:
+	az aks get-credentials --resource-group myResourceGroup --name myAKSCluster --overwrite-existing
+
+#
+# Lab 07.
+#
+# Create new config map
+create-configmap:
+	kubectl create -f configmap/myconfigmap.yaml
+
+# Create Pod using configmap
+create-pod-configmap:
+	kubectl create -f configmap/pod-using-configmap.yaml
+
+#
+# Lab 08.
+#
+# Create new secret
+create-secret:
+	kubectl create -f secret/secret.yaml
+
+# Create Pod using secret:
+create-pod-secret:
+	kubectl create -f secret/pod-using-secret.yaml
