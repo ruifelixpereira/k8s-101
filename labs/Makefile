@@ -8,19 +8,15 @@ export APP_NAME?=azure-vote
 export RESOURCE_GROUP=xxxxx
 export CLUSTER_NAME?=xxxxx
 export SUBSCRIPTION?=xxxxxxx
-export ACR_NAME?=xxxxx
-export ACR_RESOURCEGROUP?=xxxxx
+export SERVICE_PRINCIPAL_APP_ID?=xxxxxxx
+export SERVICE_PRINCIPAL_SECRET?=xxxxxxxx
 
 # Permanent local overrides
--include ../.env
-
-# Get Service Principal for Kubernetes cluster
-SERVICE_PRINCIPAL_ID=$(shell az aks show -g $(RESOURCE_GROUP) --name $(CLUSTER_NAME) -o json | jq -r ".servicePrincipalProfile.clientId")
+-include ./.env
 
 # Set the CLI to use my subscription
 default:
 	az account set -s $(SUBSCRIPTION)
-	az acr login --name $(ACR_NAME) --resource-group $(ACR_RESOURCEGROUP)
 
 # dump resource groups
 resources:
@@ -40,10 +36,13 @@ create:
 		--resource-group $(RESOURCE_GROUP) \
 		--name $(CLUSTER_NAME) \
 		--node-count 2 \
-		--node-vm-size Standard_A2_v2 \
+		--node-vm-size Standard_D4s_v3 \
+		--service-principal $(SERVICE_PRINCIPAL_APP_ID) \
+		--client-secret $(SERVICE_PRINCIPAL_SECRET) \
 		--generate-ssh-keys
 #		--no-wait
 
+# Only run this if not using Azure cloud Shell
 install-cli:
 	sudo az aks install-cli
 	
@@ -63,41 +62,52 @@ destroy:
 		--name $(RESOURCE_GROUP) \
 		--no-wait
 
-
-# Add kubernetes service principal permissions to access ACR with Reader role
-allow-access-to-acr:
-	az role assignment create \
-		--role=Reader \
-		--scope=/subscriptions/$(SUBSCRIPTION)/resourceGroups/$(ACR_RESOURCEGROUP)/providers/Microsoft.ContainerRegistry/registries/$(ACR_NAME) \
-		--assignee $(SERVICE_PRINCIPAL_ID)
-
-check-access-to-acr:
-	az role assignment list \
-		--assignee $(SERVICE_PRINCIPAL_ID) --all  
-
 #
 # Lab 01 (optional).
 #
-# Get versions
-get-cluster-versions:
-	az aks get-versions --resource-group $(RESOURCE_GROUP) --name $(CLUSTER_NAME) --location $(LOCATION) --output table
-
-get-instrumentation-key:
-	az resource show --resource-group $(NAMESPACE_PREFIX)-monitoring --name $(NAMESPACE_PREFIX) --resource-type "Microsoft.Insights/components" --query 'properties.InstrumentationKey' --output tsv
+# Get available ersions
+get-available-versions:
+	az aks get-versions --location $(LOCATION) --output table
 
 # Upgrade cluster (takes time, avoid it in demo)
 upgrade-cluster-to-%:
 	az aks upgrade --resource-group $(RESOURCE_GROUP) --name $(CLUSTER_NAME) --kubernetes-version $*
 
+# Setup k8s console permission with rbac. You only need to run this once.
+prep-console-perms:
+	kubectl create clusterrolebinding kubernetes-dashboard -n kube-system \
+		--clusterrole=cluster-admin --serviceaccount=kube-system:kubernetes-dashboard
+
 # Open the management console
 browse-console:
 	az aks browse --resource-group $(RESOURCE_GROUP) --name $(CLUSTER_NAME)
 
-# Proxy to the management console
-# Browse this URL: http://localhost:8001/api/v1/namespaces/kube-system/services/http:kubernetes-dashboard:/proxy/#!/overview?namespace=default
-proxy:
-	kubectl proxy --port 8001
+# Scale the cluster (it might take a couple of minutes)
+scale-cluster:
+	az aks scale \
+		--resource-group=$(RESOURCE_GROUP) \
+		--name=$(CLUSTER_NAME) \
+		--node-count 3
 
+#
+# Lab 02.
+#
+# Deploy kubernetes app to the cluster
+deploy-app:
+	kubectl create -f sample-app/azure-vote.yaml
+
+# Explore the created app artifacts
+get-deployments:
+	kubectl get deployments
+
+describe-deployments:
+	kubectl describe deployments
+
+get-replicasets:
+	kubectl get rs
+
+get-pods:
+	kubectl get pods -o wide
 
 # Scale number of frontend pods
 scale-frontend:
@@ -111,141 +121,76 @@ auto-scale:
 		--max=15 \
 		--cpu-percent=80
 
-# Scale the cluster (2 min - avoid it in the demo - it doesn't appear imediately in the Kubernetes admin dashboard)
-scale-cluster:
-	az aks scale \
-		--resource-group=$(RESOURCE_GROUP) \
-		--name=$(CLUSTER_NAME) \
-		--node-count 3
+#
+# Lab 03. Namespaces
+#
+create-namespace:
+	kubectl get namespaces
+	kubectl create namespace hellons
+
 
 #
-# Lab 02.
-#
-# Deploy kubernetes app to the cluster
-deploy-app:
-	kubectl create -f azure-vote.yaml
-
-# Explore the created app artifacts
-get-deployments:
-	kubectl get deployments
-
-describe-deployments:
-	kubectl describe deployments
-
-get-replicasets:
-	kubectl get rs
-
-get-pods:
-	kubectl get pods --show-labels
-
-#
-# Lab 03.
+# Lab 04.
 #
 # Deploy kubernetes services to the cluster
 
 create-public-service:
-	kubectl create -f azure-vote-service-public.yaml
+	kubectl create -f sample-app/azure-vote-service-public.yaml
 
 # Get demo app dashboard external IP address
 app-public-ip:
 	kubectl get service azure-vote-front --watch
 
 create-private-service:
-	kubectl create -f azure-vote-service-private.yaml
+	kubectl create -f sample-app/azure-vote-service-private.yaml
 
 create-nodeport-service:
-	kubectl create -f nodeport-service.yaml
+	kubectl create -f sample-app/nodeport-service.yaml
 	kubectl describe service azure-vote-front-node
 
 new-cleanup:
-#	kubectl delete service azure-vote-front-node
-#	kubectl delete service azure-vote-front-internal
+	kubectl delete service azure-vote-front-node
+	kubectl delete service azure-vote-front-internal
 	kubectl delete deployment azure-vote-front
 	kubectl delete deployment azure-vote-back
 	kubectl delete service azure-vote-front
 	kubectl delete service azure-vote-back
 
-#
-# Lab 04.
-#
-# Check storage classes
-get-storageclasses:
-	kubectl get storageclasses
-
-# Create new storage class
-create-storageclass:
-	kubectl create -f volumes/sample-storageclass.yaml
-
-# Create new persistent volume
-create-pvc:
-	kubectl create -f volumes/sample-pvc.yaml
-
-# Get persistent volumes
-get-pv:
-	kubectl get pv
-
-describe-pv:
-	kubectl describe pv
-
-test-pv:
-	kubectl apply -f volumes/test-persistent-volumes.yaml
-
-check-pv:
-	kubectl get pod task-pv-pod
-	kubectl exec -it task-pv-pod -- /bin/bash
 
 #
-# Lab 05.
+# Lab 05b. Setup Ingress Controller
 #
-create-namespace:
-	kubectl get namespaces
-	kubectl create namespace aznamespace
+setup-ingress-controller:
+	# Create a namespace for your ingress resources
+	kubectl create namespace ingress-basic
 
-#
-# Lab 06.
-#
-provision-rbac:
-	AKS_ID=$(az aks show --resource-group myResourceGroup --name myAKSCluster --query id -o tsv)
-	APPDEV_ID=$(az ad group create --display-name appdev --mail-nickname appdev --query objectId -o tsv)
-	az role assignment create \
-		--assignee $(APPDEV_ID) \
-		--role "Azure Kubernetes Service Cluster User Role" \
-  		--scope $(AKS_ID)
-	AKSDEV_ID=$(az ad user create --display-name "AKS Dev" --user-principal-name aksdev@contoso.com --password P@ssw0rd1 --query objectId -o tsv)
-	az ad group member add --group appdev --member-id $(AKSDEV_ID)
+	# Add the official stable repo
+	helm repo add stable https://kubernetes-charts.storage.googleapis.com/
 
-# Colect final output Id and use it to replace groupObjectId in file rolebinding-dev-namespace.yaml
-aks-rbac-admin:
-	az aks get-credentials --resource-group myResourceGroup --name myAKSCluster –admin
-	kubectl create namespace dev
-	kubectl apply -f rbac/role-dev-namespace.yaml
-	az ad group show --group appdev --query objectId -o tsv
+	# Use Helm to deploy an NGINX ingress controller
+	helm install nginx stable/nginx-ingress \
+    		--namespace ingress-basic \
+    		--set controller.replicaCount=2 \
+    		--set controller.nodeSelector."beta\.kubernetes\.io/os"=linux \
+    		--set defaultBackend.nodeSelector."beta\.kubernetes\.io/os"=linux
 
-# After running the previous command and customizing file rolebinding-dev-namespace.yaml
-aks-rbac-admin-2:
-	kubectl apply -f rolebinding-dev-namespace.yaml
-
-test-with-user:
-	az aks get-credentials --resource-group myResourceGroup --name myAKSCluster --overwrite-existing
+check-ingress-controller:
+	kubectl get service -l app=nginx-ingress --namespace ingress-basic
 
 #
-# Lab 07.
+# Lab 05a. Create Ingress distribution rules
 #
-# Create new config map
-create-configmap:
-	kubectl create -f configmap/myconfigmap.yaml
+create-ingress-sample-apps:
+	kubectl create -f ingress/apple.yaml 
+	kubectl create -f ingress/banana.yaml
 
-# Create Pod using configmap
-create-pod-configmap:
-	kubectl create -f configmap/pod-using-configmap.yaml
+define-ingress-rules:
+	kubectl create -f ingress/app-ingress.yaml
+
 
 #
-# Lab 08.
+# Debug pod for testing and curl internal IPs
 #
-# Create new secret
-create-secret:
-	kubectl create -f secret/secret.yaml
+test-pod:
+	kubectl run -i --tty --rm debug --image=radial/busyboxplus --restart=Never -- sh
 
-# Create Pod using secret:
-create-pod-secret:
-	kubectl create -f secret/pod-using-secret.yaml
