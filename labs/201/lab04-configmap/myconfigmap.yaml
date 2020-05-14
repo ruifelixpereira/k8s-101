@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-special-config
+  namespace: cfg-ns
+data:
+  log_level: INFO
+  special.type: xpto
