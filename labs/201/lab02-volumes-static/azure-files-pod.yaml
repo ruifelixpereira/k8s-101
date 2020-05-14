@@ -19,6 +19,6 @@ spec:
   volumes:
   - name: azure
     azureFile:
-      secretName: azure-secret
+      secretName: azure-storage-secret
       shareName: aksshare
       readOnly: false

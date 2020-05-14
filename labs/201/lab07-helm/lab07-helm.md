@@ -44,9 +44,7 @@ helm list
 ## Validate that the k8s resources are created and running
 
 ```shell
-kubetctl get pods
-kubetctl get deployments
-kubetctl get get services
+kubectl get all
 ```
 
 Try to open the url in your browser.

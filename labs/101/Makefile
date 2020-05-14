@@ -94,7 +94,7 @@ scale-cluster:
 #
 # Deploy kubernetes app to the cluster
 deploy-app:
-	kubectl create -f sample-app/azure-vote.yaml
+	kubectl create -f lab02-04-sample-app/azure-vote.yaml
 
 # Explore the created app artifacts
 get-deployments:
@@ -135,17 +135,17 @@ create-namespace:
 # Deploy kubernetes services to the cluster
 
 create-public-service:
-	kubectl create -f sample-app/azure-vote-service-public.yaml
+	kubectl create -f lab02-04-sample-app/azure-vote-service-public.yaml
 
 # Get demo app dashboard external IP address
 app-public-ip:
 	kubectl get service azure-vote-front --watch
 
 create-private-service:
-	kubectl create -f sample-app/azure-vote-service-private.yaml
+	kubectl create -f lab02-04-sample-app/azure-vote-service-private.yaml
 
 create-nodeport-service:
-	kubectl create -f sample-app/nodeport-service.yaml
+	kubectl create -f lab02-04-sample-app/nodeport-service.yaml
 	kubectl describe service azure-vote-front-node
 
 new-cleanup:
@@ -181,11 +181,11 @@ check-ingress-controller:
 # Lab 05a. Create Ingress distribution rules
 #
 create-ingress-sample-apps:
-	kubectl create -f ingress/apple.yaml 
-	kubectl create -f ingress/banana.yaml
+	kubectl create -f lab05-ingress/apple.yaml 
+	kubectl create -f lab05-ingress/banana.yaml
 
 define-ingress-rules:
-	kubectl create -f ingress/app-ingress.yaml
+	kubectl create -f lab05-ingress/app-ingress.yaml
 
 
 #

@@ -1,7 +1,7 @@
 kind: StorageClass
 apiVersion: storage.k8s.io/v1beta1
 metadata:
-     name: azure-disk-standard
+     name: azure-disk-standard-test
 provisioner: kubernetes.io/azure-disk
 parameters:
   storageaccounttype: Standard_LRS
@@ -10,7 +10,7 @@ parameters:
 kind: StorageClass
 apiVersion: storage.k8s.io/v1beta1
 metadata:
-     name: azure-disk-premium
+     name: azure-disk-premium-test
 provisioner: kubernetes.io/azure-disk
 parameters:
   storageaccounttype: Premium_LRS
